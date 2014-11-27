@@ -109,6 +109,66 @@ bool init_pages (uint8_t file_id)
     return true;
 }
 
+bool insert_char (char c, int pos)
+{
+    if (currentPage->num_bytes < PAGE_BYTES)
+    {  // there's room for another character in our current buffer
+        // shift everything beyond pos forward
+        for (int i = PAGE_BYTES - 1; i > pos; i--)
+            currentPage->data[i] = currentPage->data[i - 1];
+        
+        currentPage->num_bytes++;
+        editOverflowPage->file_offset++;
+        
+        currentPage->data[i] = c;
+        return true;
+    }
+    else if (editOverflowPage->num_bytes < PAGE_BYTES)
+    {  // there's room in the overflow buffer
+        // shift everything in the overflow buffer forward
+        for (int i = PAGE_BYTES - 1; i > 0; i--)
+            editOverflowPage->data[i] = editOverflowPage->data[i - 1];
+        
+        // copy the last byte of the current page into the first byte of overflow
+        editOverflowPage->data[0] = currentPage->data[PAGE_BYTES - 1];
+        editOverflowPage->num_bytes++;
+        
+        // shift everything beyond pos forward in the current buffer
+        for (int i = PAGE_BYTES - 1; i > pos; i--)
+            currentPage->data[i] = currentPage->data[i - 1];
+        
+        currentPage->data[i] = c;
+        return true;
+    }
+    else
+    {  // both the current and edit overflow buffers are full
+        // we need to save first, to clear out the overflow buffer
+        if (!save_pages())
+            return false;
+        
+        // copy the last byte of the current page into the first byte of overflow
+        editOverflowPage->data[0] = currentPage->data[PAGE_BYTES - 1];
+        editOverflowPage->num_bytes++;
+        
+        // shift everything beyond pos forward in the current buffer
+        for (int i = PAGE_BYTES - 1; i > pos; i--)
+            currentPage->data[i] = currentPage->data[i - 1];
+        
+        currentPage->data[i] = c;
+        return true;
+    }
+}
+
+bool backspace_char (int pos)
+{
+    
+}
+
+bool delete_char (int pos)
+{
+    
+}
+
 bool page_down (void)
 {
     // save the document if the prev page buffer has been modified
@@ -233,6 +293,9 @@ bool save_pages (void)
     
     prevPage->modified = false;
     currentPage->modified = false;
+    
+    // clear the edit overflow page
+    editOverflowPage->num_bytes = 0;
     editOverflowPage->modified = false;
 }
 

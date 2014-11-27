@@ -10,7 +10,6 @@ typedef struct Page
     char data[PAGE_BYTES];
     uint16_t num_bytes;
     bool modified;
-    int16_t modified_bytes;
     
     uint32_t file_offset;
 } Page;
@@ -22,7 +21,10 @@ extern Page *editOverflowPage;
 
 bool init_pages (uint8_t file_id);
 
-bool insert_char (
+// pos is the position in the current page, not the overall file
+bool insert_char    (char c, int pos);
+bool backspace_char (int pos);
+bool delete_char    (int pos);
 
 bool page_down (void);
 bool page_up (void);
