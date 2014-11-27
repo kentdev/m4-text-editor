@@ -159,14 +159,21 @@ bool insert_char (char c, int pos)
     }
 }
 
-bool backspace_char (int pos)
+void backspace_char (int pos)
 {
+    if (pos == 0 || pos >= currentPage->num_bytes)
+        return;
     
+    // shift everything beyond pos-1 back one space
+    for (int i = pos; i < currentPage->num_bytes; i++)
+        currentPage->data[i - 1] = currentPage->data[i];
+    
+    currentPage->num_bytes--;
 }
 
-bool delete_char (int pos)
+void delete_char (int pos)
 {
-    
+    backspace_char (pos + 1);
 }
 
 bool page_down (void)
