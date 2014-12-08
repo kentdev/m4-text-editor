@@ -55,6 +55,8 @@ static bool fill_buffer (Page *buffer)
         
         if (!m_sd_read_file (active_fid, increment, &(buffer->data[buffer->num_bytes]) ))
             return false;
+        
+        buffer->num_bytes += increment;
     }
 }
 
