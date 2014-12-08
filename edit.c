@@ -116,6 +116,9 @@ void redraw_screen (const char *name)
     for (uint8_t q = 0; q < COLS_PER_LINE; q++)
         putchar ('_');
     
+    // move the cursor to the beginning of the first line
+    position_cursor (4, 1);
+    
     printf ("\033[0m");  // reset text color
     
     // restore the cursor position
@@ -129,9 +132,9 @@ bool save (uint8_t file_id)
 
 void edit (uint8_t file_id, const char *name)
 {
-    uint16_t cursor_pos = 0;
-    uint8_t  cursor_column = 0;
-    uint8_t  cursor_window_line = 0;
+    uint8_t cursor_row = 0;
+    uint8_t cursor_col = 0;
+    uint16_t cursor_page_pos = 0;
     
     //init_line_window();
     
@@ -196,61 +199,106 @@ void edit (uint8_t file_id, const char *name)
         
         if (editState == NAVIGATE)
         {
-            /*
             if (c == 'w' || c == 'W')
             {  // move cursor up
-                
-                // if the cursor is below the median, or there are
-                // no more previous lines to load, move the cursor up
-                if (cursor_window_line > NUM_LINES / 2)
+                if (cursor_row > 0)
                 {
-                    if (cursor_window_line > 0)
+                    cursor_row--;
+                    printf ("\033[A");
+                }
+                else if (!is_first_page())
+                {  // move up a page and set the cursor to the bottom of the new page
+                    if (!page_up())
                     {
-                        cursor_window_line--;
-                        
-                        // move the cursor up one line
-                        putchar (27);
-                        printf ("[A");
-                        
-                        // if the new line is invalid, initialize it
-                        if (orderedLines[cursor_window_line]->line_number == INVALID)
-                        {
-                            // TODO
-                        }
+                        printf ("\033[2J\033[HError reading file while scrolling up (error %d)\r\n", m_sd_error_code);
+                        return;
                     }
+                    cursor_row = LINES_PER_PAGE - 1;
+                    printf ("\033[%dB", LINES_PER_PAGE - 1);
                 }
-                else
-                {  // keep the cursor on the same line, but move the whole window up
-                    line_window_up();
-                    
-                    draw_screen (name, "MOVE");
-                }
-                
-                cursor_column = 0;
             }
             else if (c == 's' || c == 'S')
             {  // move cursor down
-                
+                if (cursor_row < LINES_PER_PAGE - 1)
+                {
+                    cursor_row++;
+                    printf ("\033[B");
+                }
+                else if (!is_last_page())
+                {  // move down a page and set the cursor to the top of the new page
+                    if (!page_down())
+                    {
+                        printf ("\033[2J\033[HError reading file while scrolling down (error %d)\r\n", m_sd_error_code);
+                        return;
+                    }
+                    cursor_row = 0;
+                    printf ("\033[%dA", LINES_PER_PAGE - 1);
+                }
             }
             else if (c == 'a' || c == 'A')
             {  // move cursor left
-                
+                if (cursor_col > 0)
+                {
+                    cursor_col--;
+                    printf ("\033[D");
+                }
+                else if (cursor_row > 0)
+                {  // move to the rightmost position of the previous row
+                    cursor_col = COLS_PER_LINE - 1;
+                    cursor_row--;
+                    printf ("\033[A\033[%dC", COLS_PER_LINE - 1);
+                }
+                else if (!is_first_page())
+                {  // we were on the first column of the first line, move up a page
+                    if (!page_up())
+                    {
+                        printf ("\033[2J\033[HError reading file while scrolling up (error %d)\r\n", m_sd_error_code);
+                        return;
+                    }
+                    cursor_row = LINES_PER_PAGE - 1;
+                    cursor_col = COLS_PER_LINE - 1;
+                    printf ("\033[%dB\033[%dC", LINES_PER_PAGE - 1, COLS_PER_LINE - 1);
+                }
             }
             else if (c == 'd' || c == 'D')
             {  // move cursor right
-                
+                if (cursor_col < COLS_PER_LINE - 1)
+                {
+                    cursor_col++;
+                    printf ("\033[C");
+                }
+                else if (cursor_row < LINES_PER_PAGE - 1)
+                {  // if we were on the last column, move down a row
+                    cursor_col = 0;
+                    cursor_row++;
+                    printf ("\033[%dD\033[B", COLS_PER_LINE - 1);
+                }
+                else if (!is_last_page())
+                {  // we were on the last column of the last line, move down a page
+                    if (!page_down())
+                    {
+                        printf ("\033[2J\033[HError reading file while scrolling down (error %d)\r\n", m_sd_error_code);
+                        return;
+                    }
+                    cursor_row = 0;
+                    cursor_col = 0;
+                    printf ("\033[%dA\033%dD", LINES_PER_PAGE - 1, COLS_PER_LINE - 1);
+                }
             }
-            */
+            
+            // update our offset in the page
+            cursor_page_pos = cursor_row * COLS_PER_LINE + cursor_col;
         }
         else if (editState == INSERT)
         {  // in edit mode
             if (c == 127) // backspace
             {
-                // need to handle backspacing
+                backspace_char (cursor_page_pos);
+                
             }
             else
             {
-                if (insert_char (c, cursor_pos))
+                if (insert_char (c, cursor_page_pos))
                 {
                     
                 }

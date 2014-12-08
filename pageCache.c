@@ -113,6 +113,16 @@ bool init_pages (uint8_t file_id)
     return true;
 }
 
+bool is_first_page (void)
+{
+    return (currentPage->file_offset == 0);
+}
+
+bool is_last_page  (void)
+{
+    return (currentPage->file_offset + PAGE_BYTES >= active_fid_disk_size);
+}
+
 bool insert_char (char c, int pos)
 {
     if (currentPage->num_bytes < PAGE_BYTES)
@@ -239,6 +249,8 @@ bool page_up (void)
 
 bool save_pages (void)
 {
+    uint32_t newDiskSize = 0;
+    
     if (active_fid == INVALID_FID)
         return false;
     
@@ -291,6 +303,7 @@ bool save_pages (void)
                 return false;
             
             const uint32_t endOfWrite = tempWrite->file_offset + tempWrite->num_bytes;
+            newDiskSize = endOfWrite;
             
             // swap the read and write buffers
             Page *swap = tempRead;
@@ -301,6 +314,9 @@ bool save_pages (void)
             tempWrite->file_offset = endOfWrite;
         }
     }
+    
+    // update the cached file size
+    active_fid_disk_size = newDiskSize;
     
     prevPage->modified = false;
     currentPage->modified = false;

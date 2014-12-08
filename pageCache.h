@@ -23,6 +23,9 @@ extern Page *editOverflowPage;
 
 bool init_pages (uint8_t file_id);
 
+bool is_first_page (void);
+bool is_last_page  (void);
+
 // pos is the position in the current page, not the overall file
 bool insert_char    (char c, int pos);
 void backspace_char (int pos);
