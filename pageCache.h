@@ -5,6 +5,8 @@
 #define LINES_PER_PAGE  10
 #define PAGE_BYTES      (COLS_PER_LINE * LINES_PER_PAGE)
 
+#include "main.h"
+
 typedef struct Page
 {
     char data[PAGE_BYTES];
@@ -23,8 +25,8 @@ bool init_pages (uint8_t file_id);
 
 // pos is the position in the current page, not the overall file
 bool insert_char    (char c, int pos);
-bool backspace_char (int pos);
-bool delete_char    (int pos);
+void backspace_char (int pos);
+void delete_char    (int pos);
 
 bool page_down (void);
 bool page_up (void);

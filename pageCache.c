@@ -1,4 +1,4 @@
-#include "PageCache.h"
+#include "pageCache.h"
 
 #define INVALID_FID    0xff
 #define INVALID_OFFSET 0xffffffff
@@ -42,7 +42,7 @@ static bool fill_buffer (Page *buffer)
     while (buffer->num_bytes < PAGE_BYTES &&
            buffer->file_offset + buffer->num_bytes < active_fid_disk_size)
     {
-        uint32_t increment = COL_PER_LINE;
+        uint32_t increment = COLS_PER_LINE;
         
         // avoid reading past the end of the file
         if (active_fid_disk_size < buffer->file_offset + buffer->num_bytes + increment)
@@ -53,7 +53,7 @@ static bool fill_buffer (Page *buffer)
         if (buffer->num_bytes + increment > PAGE_BYTES)
             increment = PAGE_BYTES - buffer->num_bytes;
         
-        if (!m_sd_read_file (file_id, increment, &(buffer->data[buffer->num_bytes]) ))
+        if (!m_sd_read_file (active_fid, increment, &(buffer->data[buffer->num_bytes]) ))
             return false;
     }
 }
@@ -102,7 +102,7 @@ bool init_pages (uint8_t file_id)
     
     // initialize the "edit overflow" buffer
     editOverflowPage->num_bytes = 0;
-    editOverflowPage->file_offset = current_page->num_bytes;
+    editOverflowPage->file_offset = currentPage->num_bytes;
     editOverflowPage->modified = false;
     
     active_fid = file_id;
@@ -120,7 +120,7 @@ bool insert_char (char c, int pos)
         currentPage->num_bytes++;
         editOverflowPage->file_offset++;
         
-        currentPage->data[i] = c;
+        currentPage->data[pos] = c;
         return true;
     }
     else if (editOverflowPage->num_bytes < PAGE_BYTES)
@@ -137,7 +137,7 @@ bool insert_char (char c, int pos)
         for (int i = PAGE_BYTES - 1; i > pos; i--)
             currentPage->data[i] = currentPage->data[i - 1];
         
-        currentPage->data[i] = c;
+        currentPage->data[pos] = c;
         return true;
     }
     else
@@ -154,7 +154,7 @@ bool insert_char (char c, int pos)
         for (int i = PAGE_BYTES - 1; i > pos; i--)
             currentPage->data[i] = currentPage->data[i - 1];
         
-        currentPage->data[i] = c;
+        currentPage->data[pos] = c;
         return true;
     }
 }
@@ -243,7 +243,7 @@ bool save_pages (void)
     {
         if (!m_sd_seek (active_fid, prevPage->file_offset))
             return false;
-        if (!m_sd_write_file (active_fid, prevPage->modified_num_bytes, prevPage->data))
+        if (!m_sd_write_file (active_fid, prevPage->num_bytes, prevPage->data))
             return false;
     }
     
@@ -252,7 +252,7 @@ bool save_pages (void)
     {
         if (!m_sd_seek (active_fid, currentPage->file_offset))
             return false;
-        if (!m_sd_write_file (active_fid, currentPage->modified_num_bytes, currentPage->data))
+        if (!m_sd_write_file (active_fid, currentPage->num_bytes, currentPage->data))
             return false;
     }
     
@@ -261,7 +261,7 @@ bool save_pages (void)
         // before writing the edit overflow buffer, read from the file to see
         // what it will be overwriting on disk
         
-        Page *tempRead = saveTemp;
+        Page *tempRead = &saveTemp;
         Page *tempWrite = editOverflowPage;
         
         bool finished = false;

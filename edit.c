@@ -70,6 +70,11 @@ void draw_state_line (void)
     }
 }
 
+void draw_error_line (const char *errorText)
+{
+    printf ("\033[41;30%s\0330m\r\n", errorText);
+}
+
 void draw_info_line (void)
 {
     // blue for line breaks, yellow for tabs, red for other unprintables
@@ -106,6 +111,7 @@ void redraw_screen (const char *name)
     
     draw_state_line();
     draw_info_line();
+    draw_error_line ("");
     
     for (uint8_t q = 0; q < COLS_PER_LINE; q++)
         putchar ('_');
@@ -123,8 +129,9 @@ bool save (uint8_t file_id)
 
 void edit (uint8_t file_id, const char *name)
 {
-    uint32_t cursor_column = 0;
-    uint8_t cursor_window_line = 0;
+    uint16_t cursor_pos = 0;
+    uint8_t  cursor_column = 0;
+    uint8_t  cursor_window_line = 0;
     
     //init_line_window();
     
@@ -234,7 +241,18 @@ void edit (uint8_t file_id, const char *name)
                 // need to handle backspacing
             }
             else
+            {
+                if (insert_char (c, cursor_pos))
+                {
+                    
+                }
+                else
+                {
+                    
+                }
+                
                 printChar (c);
+            }
         }
     }
 }
