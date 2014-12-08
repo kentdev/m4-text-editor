@@ -16,7 +16,7 @@ void keycodes (void)
             return;
         }
         else
-            printf ("%d\r\n", c);
+            printf ("%d\r\n", intch);
     }
 }
 

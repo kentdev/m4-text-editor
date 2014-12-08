@@ -210,7 +210,7 @@ void process_command (void)
     */
     
     if (strcmp (command_tokens[0], "help") == 0)
-        printf ("Commands: ls, cd, print, mkdir, rmdir, write, append\r\n");
+        printf ("Commands: ls, cd, print, mkdir, rmdir, write, append, edit, keycode\r\n");
     else if (strcmp (command_tokens[0], "ls") == 0)
     {
         if (num_tokens > 1)
