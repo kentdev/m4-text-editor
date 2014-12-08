@@ -27,6 +27,8 @@ void writeToFile  (const char *fileName,
 // edit.c:
 void edit (uint8_t file_id, const char *name);  // open the text editor for this file
 
+// keycodes.c:
+void keycodes (void);  // print the ASCII code of the pressed key
 
 #endif
 

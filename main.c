@@ -348,6 +348,10 @@ void process_command (void)
             printf ("Error closing file!  Error code %d\r\n", m_sd_error_code);
         }
     }
+    else if (strcmp (command_tokens[0], "keycode") == 0)
+    {  // print the ASCII number of the pressed keys, CTRL-C exits
+        keycodes();
+    }
     else
     {
         printf ("unknown command\r\n");
