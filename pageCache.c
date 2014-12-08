@@ -60,7 +60,10 @@ static bool fill_buffer (Page *buffer)
 
 bool init_pages (uint8_t file_id)
 {
-    save_pages();
+    if (active_fid != INVALID_FID)
+        save_pages();
+    
+    active_fid = file_id;
     
     for (uint8_t i = 0; i < 4; i++)
     {
@@ -105,7 +108,6 @@ bool init_pages (uint8_t file_id)
     editOverflowPage->file_offset = currentPage->num_bytes;
     editOverflowPage->modified = false;
     
-    active_fid = file_id;
     return true;
 }
 

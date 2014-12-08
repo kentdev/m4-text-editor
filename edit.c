@@ -139,7 +139,7 @@ void edit (uint8_t file_id, const char *name)
     if (!m_sd_seek (file_id, FILE_END_POS) ||
         !m_sd_get_seek_pos (file_id, &FILE_SIZE))
     {
-        printf ("Error getting file size, can't edit (error %d)\r\n> ", m_sd_error_code);
+        printf ("Error getting file size, can't edit (error %d)\r\n", m_sd_error_code);
         return;
     }
     
@@ -150,6 +150,14 @@ void edit (uint8_t file_id, const char *name)
     
     // draw the initial view
     redraw_screen (name);
+    
+    // load the initial data from the document
+    if (!init_pages (file_id))
+    {
+        // since we've already messed with the screen, clear it entirely
+        printf ("\033[2J\033[HError reading file (error %d)\r\n", m_sd_error_code);
+        return;
+    }
     
     for (;;)
     {
@@ -236,7 +244,7 @@ void edit (uint8_t file_id, const char *name)
         }
         else if (editState == INSERT)
         {  // in edit mode
-            if (c == 8 || c == 127) // backspace or delete
+            if (c == 127) // backspace
             {
                 // need to handle backspacing
             }
