@@ -12,6 +12,18 @@ mode), only with WASD to move the cursor instead of the arrow keys.
 
 */
 
+enum linepos
+{
+    TITLE_LINE = 1,
+    MODE_LINE,
+    INFO_LINE,
+    STATUS_LINE,
+    ERROR_LINE,
+    SEPARATOR_LINE,
+    BLANK_LINE,
+    PAGE_START_LINE
+};
+
 #include "mGeneral.h"
 #include "m_microsd.h"
 #include "pageCache.h"
@@ -52,10 +64,17 @@ inline void printChar (const char c)
     prevPrintedChar = c;
 }
 
+inline void position_cursor (uint8_t line_index, uint8_t column)
+{
+    printf ("\033[%u;%uH", line_index, column);
+}
+
 void print_current_page (void)
 {
     if (!currentPage)
         return;
+    
+    position_cursor (PAGE_START_LINE, 0);
     
     int i = 0;
     for (int y = 0; y < LINES_PER_PAGE; y++)
@@ -75,39 +94,39 @@ void print_current_page (void)
         
 }
 
-
-inline void position_cursor (uint8_t line_index, uint8_t column)
+void draw_mode_line (void)
 {
-    printf ("\033[%u;%uH", 3 + line_index, column);
-}
-
-void draw_state_line (void)
-{
+    position_cursor (MODE_LINE, 1);
+    
     switch (editState)
     {
         case NAVIGATE:
             // "WASD" is green
-            printf ("NAV mode: use \033[32mWASD\033[0m to move around the document, CTRL-P to insert\r\n");
+            printf ("NAV mode: use \033[32mWASD\033[0m to move around the document, CTRL-P to insert");
             break;
         case INSERT:
-            printf ("INSERT mode: type to insert characters, CTRL-P to navigate\r\n");
+            printf ("INSERT mode: type to insert characters, CTRL-P to navigate");
             break;
     }
 }
 
 void draw_error_line (const char *errorText)
 {
-    printf ("\033[41;30%s\0330m\r\n", errorText);
+    position_cursor (ERROR_LINE, 1);
+    printf ("\033[41;30m%s\033[0m", errorText);
 }
 
 void draw_info_line (void)
 {
+    position_cursor (INFO_LINE, 1);
+    
     // blue for line breaks, yellow for tabs, red for other unprintables
-    printf ("\033[44;30mLine Break\033[0m \033[43;30mTab\033[0m \033[41;30mUnknown Character\033[0m\r\n");
+    printf ("\033[44;30mLine Break\033[0m \033[43;30mTab\033[0m \033[41;30mUnknown Character\033[0m");
 }
 
 void draw_status_line (void)
 {
+    position_cursor (STATUS_LINE, 1);
     printf ("Cursor position: %d (row %d, col %d)                    \r\n", cursor_page_pos, cursor_row, cursor_col);
 }
 
@@ -139,20 +158,18 @@ void redraw_screen (const char *name)
     // restore normal text colors
     printf ("\033[0m");
     
-    draw_state_line();
+    draw_mode_line();
     draw_info_line();
     draw_status_line();
     draw_error_line ("");
     
+    position_cursor (SEPARATOR_LINE, 1);
     for (uint8_t q = 0; q < COLS_PER_LINE; q++)
         putchar ('_');
     
-    // move the cursor to the beginning of the first line
-    position_cursor (6, 1);
-    
     print_current_page();
     
-    printf ("\033[0m");  // reset text color
+    printf ("\033[0m");  // make sure the text color is the default
     
     // restore the cursor position
     printf ("\033[u");
@@ -165,8 +182,6 @@ bool save (uint8_t file_id)
 
 void edit (uint8_t file_id, const char *name)
 {
-    //init_line_window();
-    
     // get the size of the file
     if (!m_sd_seek (file_id, FILE_END_POS) ||
         !m_sd_get_seek_pos (file_id, &FILE_SIZE))
@@ -184,7 +199,7 @@ void edit (uint8_t file_id, const char *name)
         return;
     }
     
-    position_cursor (6, 1);
+    position_cursor (PAGE_START_LINE, 1);
     
     // draw the initial view
     redraw_screen (name);
@@ -224,7 +239,7 @@ void edit (uint8_t file_id, const char *name)
                     cursor_page_pos = currentPage->num_bytes - 1;
                     cursor_row = cursor_page_pos / COLS_PER_LINE;
                     cursor_col = cursor_page_pos % COLS_PER_LINE;
-                    position_cursor (cursor_row, cursor_col);
+                    position_cursor (PAGE_START_LINE + cursor_row, cursor_col + 1);
                 }
             }
             else
@@ -327,7 +342,6 @@ void edit (uint8_t file_id, const char *name)
             cursor_page_pos = cursor_row * COLS_PER_LINE + cursor_col;
             
             printf ("\033[s");  // save the cursor position
-            position_cursor (1, 1);
             draw_status_line();
             printf ("\033[u");  // restore the cursor position
         }
