@@ -20,9 +20,11 @@ mode), only with WASD to move the cursor instead of the arrow keys.
 
 #define INVALID ((uint32_t)0xffffffff)
 
-char tempbuffer[COLS_PER_LINE];
-
 uint32_t FILE_SIZE;
+
+uint8_t cursor_row = 0;
+uint8_t cursor_col = 0;
+uint16_t cursor_page_pos = 0;
 
 enum EditState
 {
@@ -48,6 +50,29 @@ inline void printChar (const char c)
         printf ("\033[41m \033[0m");
     
     prevPrintedChar = c;
+}
+
+void print_current_page (void)
+{
+    if (!currentPage)
+        return;
+    
+    int i = 0;
+    for (int y = 0; y < LINES_PER_PAGE; y++)
+    {
+        for (int x = 0; x < COLS_PER_LINE; x++)
+        {
+            printChar (currentPage->data[i]);
+            i++;
+            
+            if (i >= currentPage->num_bytes)
+                return;
+        }
+        
+        printf ("\033[%dD", COLS_PER_LINE);  // move back to the beginning of the column
+        printf ("\033[B");  // move down one line
+    }
+        
 }
 
 
@@ -81,6 +106,11 @@ void draw_info_line (void)
     printf ("\033[44;30mLine Break\033[0m \033[43;30mTab\033[0m \033[41;30mUnknown Character\033[0m\r\n");
 }
 
+void draw_status_line (void)
+{
+    printf ("Cursor position: %d (row %d, col %d)                    \r\n", cursor_page_pos, cursor_row, cursor_col);
+}
+
 void redraw_screen (const char *name)
 {
     // save the cursor position
@@ -111,13 +141,16 @@ void redraw_screen (const char *name)
     
     draw_state_line();
     draw_info_line();
+    draw_status_line();
     draw_error_line ("");
     
     for (uint8_t q = 0; q < COLS_PER_LINE; q++)
         putchar ('_');
     
     // move the cursor to the beginning of the first line
-    position_cursor (4, 1);
+    position_cursor (6, 1);
+    
+    print_current_page();
     
     printf ("\033[0m");  // reset text color
     
@@ -132,10 +165,6 @@ bool save (uint8_t file_id)
 
 void edit (uint8_t file_id, const char *name)
 {
-    uint8_t cursor_row = 0;
-    uint8_t cursor_col = 0;
-    uint16_t cursor_page_pos = 0;
-    
     //init_line_window();
     
     // get the size of the file
@@ -148,19 +177,17 @@ void edit (uint8_t file_id, const char *name)
     
     editState = NAVIGATE;
     
-    // move the cursor to the beginning of the first line
-    position_cursor (4, 1);
-    
-    // draw the initial view
-    redraw_screen (name);
-    
     // load the initial data from the document
     if (!init_pages (file_id))
     {
-        // since we've already messed with the screen, clear it entirely
-        printf ("\033[2J\033[HError reading file (error %d)\r\n", m_sd_error_code);
+        printf ("Error reading file (error %d)\r\n", m_sd_error_code);
         return;
     }
+    
+    position_cursor (6, 1);
+    
+    // draw the initial view
+    redraw_screen (name);
     
     for (;;)
     {
@@ -189,7 +216,17 @@ void edit (uint8_t file_id, const char *name)
         else if (c == 'P' - 64) // ctrl-p
         {
             if (editState == NAVIGATE)
+            {
                 editState = INSERT;
+                
+                if (cursor_page_pos > currentPage->num_bytes)
+                {
+                    cursor_page_pos = currentPage->num_bytes - 1;
+                    cursor_row = cursor_page_pos / COLS_PER_LINE;
+                    cursor_col = cursor_page_pos % COLS_PER_LINE;
+                    position_cursor (cursor_row, cursor_col);
+                }
+            }
             else
                 editState = NAVIGATE;
             
@@ -288,6 +325,11 @@ void edit (uint8_t file_id, const char *name)
             
             // update our offset in the page
             cursor_page_pos = cursor_row * COLS_PER_LINE + cursor_col;
+            
+            printf ("\033[s");  // save the cursor position
+            position_cursor (1, 1);
+            draw_status_line();
+            printf ("\033[u");  // restore the cursor position
         }
         else if (editState == INSERT)
         {  // in edit mode
@@ -295,19 +337,25 @@ void edit (uint8_t file_id, const char *name)
             {
                 backspace_char (cursor_page_pos);
                 
+                print_current_page();
+                
+                if (cursor_page_pos > 0)
+                    cursor_page_pos--;
             }
             else
             {
                 if (insert_char (c, cursor_page_pos))
                 {
+                    printChar (c);
+                    cursor_page_pos++;
                     
+                    if (cursor_page_pos >= PAGE_BYTES)
+                        cursor_page_pos = 0;
                 }
                 else
                 {
-                    
+                    draw_error_line ("Error when inserting character!");
                 }
-                
-                printChar (c);
             }
         }
     }
