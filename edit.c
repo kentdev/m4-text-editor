@@ -175,11 +175,6 @@ void redraw_screen (const char *name)
     printf ("\033[u");
 }
 
-bool save (uint8_t file_id)
-{
-    // TODO: SAVE!
-}
-
 void edit (uint8_t file_id, const char *name)
 {
     // get the size of the file
@@ -226,6 +221,10 @@ void edit (uint8_t file_id, const char *name)
             for (int i = 0; i < 12 && name[i] != ' ' && name[i] != '\0'; i++)
                 putchar (name[i]);
             printf ("\r\n");
+            
+            if (!save_pages())
+                printf ("But there was an error when saving!\r\n");
+            
             return;
         }
         else if (c == 'P' - 64) // ctrl-p
@@ -236,7 +235,7 @@ void edit (uint8_t file_id, const char *name)
                 
                 if (cursor_page_pos > currentPage->num_bytes)
                 {
-                    cursor_page_pos = currentPage->num_bytes - 1;
+                    cursor_page_pos = currentPage->num_bytes;
                     cursor_row = cursor_page_pos / COLS_PER_LINE;
                     cursor_col = cursor_page_pos % COLS_PER_LINE;
                     position_cursor (PAGE_START_LINE + cursor_row, cursor_col + 1);
@@ -360,11 +359,27 @@ void edit (uint8_t file_id, const char *name)
             {
                 if (insert_char (c, cursor_page_pos))
                 {
-                    printChar (c);
+                    print_current_page();
+                    
                     cursor_page_pos++;
+                    cursor_col++;
+                    if (cursor_col >= COLS_PER_LINE)
+                    {
+                        cursor_col = 0;
+                        cursor_row++;
+                    }
                     
                     if (cursor_page_pos >= PAGE_BYTES)
+                    {
                         cursor_page_pos = 0;
+                        cursor_row = 0;
+                        cursor_col = 0;
+                        
+                        if (!page_down())
+                            draw_error_line ("Error shifting to next page!");
+                    }
+                    
+                    position_cursor (PAGE_START_LINE + cursor_row, cursor_col);
                 }
                 else
                 {
