@@ -1,131 +1,15 @@
 /*******************************************************************************
 * m_microsd.c
-* version: 1.0
+* version: 1.1
 * date: April 16, 2013
 * author: Kent deVillafranca (kent@kentdev.net)
 * description: Contains the functions needed to communicate with the mMicroSD
-*              peripheral over I2C from the M4.
+*              peripheral over I2C from the M2 or M4.
 *******************************************************************************/
 
 #include "m_microsd.h"
-#include "mBus.h"
-
-extern CPAL_InitTypeDef      mBusStruct;
-extern CPAL_TransferTypeDef  mBusTx;
-extern CPAL_TransferTypeDef  mBusRx;
-
-#define I2C_ADDR_WRITE ((0x5D) << 1)
-#define I2C_ADDR_READ  (((0x5D) << 1) | 1)
 
 #define TWI_BUFFER_LEN 257
-
-#define MAX_RESPONSE_RETRIES        1000
-#define MS_BETWEEN_RESPONSE_RETRIES 1
-
-#define nop()  __asm__ __volatile__("nop")
-
-#ifndef false
-#define false ((bool)0)
-#endif
-
-#ifndef true
-#define true ((bool)1)
-#endif
-
-//unsigned char twi_start(unsigned char address, unsigned char readwrite);
-//unsigned char twi_send_byte(unsigned char byte);
-//void twi_stop(void);
-
-
-// convert file names from their representation on disk
-// eg., "TEST    TXT" becomes "TEST.TXT"
-void filename_fs_to_8_3 (const char *input_name,
-                         char *output_name)
-{
-    uint8_t in_index = 0;
-    uint8_t out_index = 0;
-    
-    bool wrote_dot = false;
-    
-    while (in_index < 11 && out_index < 11)
-    {
-        if (in_index < 8)
-        {
-            if (input_name[in_index] == ' ')
-            {
-                in_index = 8;  // skip to the last 3 chars
-                continue;
-            }
-            else
-            {
-                output_name[out_index++] = input_name[in_index];
-            }
-        }
-        else
-        {  // extension characters
-            if (input_name[in_index] != ' ')
-            {
-                if (!wrote_dot)
-                {
-                    output_name[out_index++] = '.';
-                    wrote_dot = true;
-                }
-                output_name[out_index++] = input_name[in_index];
-            }
-        }
-        
-        in_index++;
-    }
-    
-    output_name[out_index] = '\0';
-}
-
-void filename_8_3_to_fs (const char *input_name,
-                         char *output_name)
-{
-    uint8_t in_index = 0;
-    uint8_t out_index = 0;
-    
-    char in_char;
-    
-    while (out_index < 11)
-    {
-        if (input_name[in_index] == '\0')
-        {
-            break;
-        }
-        else if (input_name[in_index] == '.')
-        {  // encountered a period
-            while (out_index < 8)
-            {  // fill the output with spaces until the 3-char extension
-                output_name[out_index] = ' ';
-                out_index++;
-            }
-            
-            in_index++;
-        }
-        else
-        {
-            in_char = input_name[in_index];
-            
-            // convert to uppercase
-            if (in_char >= (char)0x61 && in_char <= (char)0x7a)
-				in_char -= 0x20;
-            
-            output_name[out_index] = in_char;
-            
-            in_index++;
-            out_index++;
-        }
-    }
-    
-    while (out_index < 11)
-    {
-        output_name[out_index] = ' ';
-        out_index++;
-    }
-}
-
 
 typedef enum m_microsd_command_type
 {
@@ -173,6 +57,159 @@ union m_sd_transmission
 
 m_sd_errors m_sd_error_code;
 
+
+
+
+#if defined(M2)
+//! START OF M2-SPECIFIC I2C CODE !=============================================
+
+#define I2C_ADDR (0x5D)
+
+#define MAX_RESPONSE_RETRIES        500
+#define MS_BETWEEN_RESPONSE_RETRIES 2
+
+#define nop()  __asm__ __volatile__("nop")
+
+unsigned char twi_start(unsigned char address, unsigned char readwrite);
+unsigned char twi_send_byte(unsigned char byte);
+void twi_stop(void);
+
+uint16_t strlen (const char *str)
+{
+    uint16_t i = 0;
+    while (str[i] != '\0' && i < 65535)
+        i++;
+    return i;
+}
+
+inline uint8_t read_byte (void)
+{
+    TWCR = _BV (TWEN) | _BV (TWINT) | _BV (TWEA);	// clear the flag, enable ACKs, and wait for a byte
+	while (!(TWCR & _BV (TWINT))); // wait for an interrupt to signal that a new byte is available
+	return TWDR;
+}
+
+inline uint8_t read_final_byte (void)
+{
+    TWCR = _BV (TWEN) | _BV (TWINT);	// clear the flag, no ACK, and wait for a byte
+	while (!(TWCR & _BV (TWINT))); // wait for an interrupt to signal that a new byte is available
+	return TWDR;
+}
+
+static bool send_order (void)
+{
+    // wait at least one I2C clock cycle before starting
+    for (uint16_t i = 0; i < (uint32_t)F_CPU / (uint32_t)400000; i++)
+        nop();
+    
+    cli();  // disable interrupts during the send process
+	
+	// send start
+	TWCR = _BV (TWEN) | _BV (TWINT) | _BV (TWSTA);
+	while (!(TWCR & _BV (TWINT)));  // wait for it to complete
+    
+    // set address + write direction
+	TWDR = I2C_ADDR << 1;
+	TWCR = _BV (TWEN) | _BV (TWINT);
+	while (!(TWCR & _BV (TWINT)));  // wait for it to be shifted out
+	
+	if ((TWSR & 0b11111000) == 0x20)
+	{  // if we received a NACK
+		TWCR = _BV (TWEN) | _BV (TWINT) | _BV (TWSTO);  // stop and release the line
+		sei();	// enable interrupts
+		return false;
+	}
+	
+	// send the command type
+	TWDR = transmission.order.command;
+	TWCR = _BV (TWEN) | _BV (TWINT);
+	while (!(TWCR & _BV (TWINT)));
+	
+	// send the data length
+	TWDR = transmission.order.data_length;
+	TWCR = _BV (TWEN) | _BV (TWINT);
+	while (!(TWCR & _BV (TWINT)));
+    
+	// send data
+	for(uint8_t i = 0; i < transmission.order.data_length; i++)
+	{
+		TWDR = transmission.order.data[i];
+		TWCR = _BV (TWEN) | _BV (TWINT);
+    	while (!(TWCR & _BV (TWINT)));
+	}
+	
+	// send stop
+	TWCR = _BV (TWEN) | _BV (TWINT) | _BV (TWSTO);
+	
+	sei();  // re-enable errors
+    
+    m_sd_error_code = ERROR_NONE;
+    return true;
+}
+
+static bool receive_response (void)
+{
+    uint16_t retries = 0;
+    
+retry:
+    if (retries > MAX_RESPONSE_RETRIES)
+    {
+        m_sd_error_code = ERROR_I2C_RESPONSE_TIMEOUT;
+        return false;
+    }
+    
+    // wait at least one I2C clock cycle before starting
+    for (uint16_t i = 0; i < (uint32_t)F_CPU / (uint32_t)400000; i++)
+        nop();
+    
+    if (!twi_start (I2C_ADDR, READ))
+    {
+        twi_stop();
+        retries++;
+        m_wait (MS_BETWEEN_RESPONSE_RETRIES);
+        goto retry;
+    }
+    
+    m_green (ON);
+    transmission.response.response_code = read_byte();
+    transmission.response.data_length = read_byte();
+    
+    uint8_t i;
+    for (i = 0; i < transmission.response.data_length - 1; i++)
+        transmission.response.data[i] = read_byte();
+    transmission.response.data[i] = read_final_byte();
+    
+    twi_stop();
+    m_green (OFF);
+    
+    m_sd_error_code = ERROR_NONE;
+    return true;
+}
+
+//!   END OF M2-SPECIFIC I2C CODE !=============================================
+
+#elif defined(M4)
+
+//! START OF M4-SPECIFIC I2C CODE !=============================================
+extern CPAL_InitTypeDef      mBusStruct;
+extern CPAL_TransferTypeDef  mBusTx;
+extern CPAL_TransferTypeDef  mBusRx;
+
+#define I2C_ADDR_WRITE ((0x5D) << 1)
+#define I2C_ADDR_READ  (((0x5D) << 1) | 1)
+
+#define MAX_RESPONSE_RETRIES        1000
+#define MS_BETWEEN_RESPONSE_RETRIES 1
+
+#define nop()  __asm__ __volatile__("nop")
+
+#ifndef false
+#define false ((bool)0)
+#endif
+
+#ifndef true
+#define true ((bool)1)
+#endif
 
 static bool i2c_write (void)
 {
@@ -309,6 +346,106 @@ retry:
     m_sd_error_code = ERROR_NONE;
     return true;
 }
+//!   END OF M4-SPECIFIC I2C CODE !=============================================
+
+#else
+ #error "Unknown device, you must define either M2 or M4 in the makefile"
+#endif
+
+// convert file names from their representation on disk
+// eg., "TEST    TXT" becomes "TEST.TXT"
+void filename_fs_to_8_3 (const char *input_name,
+                         char *output_name)
+{
+    uint8_t in_index = 0;
+    uint8_t out_index = 0;
+    
+    bool wrote_dot = false;
+    
+    while (in_index < 11 && out_index < 11)
+    {
+        if (in_index < 8)
+        {
+            if (input_name[in_index] == ' ')
+            {
+                in_index = 8;  // skip to the last 3 chars
+                continue;
+            }
+            else
+            {
+                output_name[out_index++] = input_name[in_index];
+            }
+        }
+        else
+        {  // extension characters
+            if (input_name[in_index] != ' ')
+            {
+                if (!wrote_dot)
+                {
+                    output_name[out_index++] = '.';
+                    wrote_dot = true;
+                }
+                output_name[out_index++] = input_name[in_index];
+            }
+        }
+        
+        in_index++;
+    }
+    
+    output_name[out_index] = '\0';
+}
+
+void filename_8_3_to_fs (const char *input_name,
+                         char *output_name)
+{
+    uint8_t in_index = 0;
+    uint8_t out_index = 0;
+    
+    char in_char;
+    
+    while (out_index < 11)
+    {
+        if (input_name[in_index] == '\0')
+        {
+            break;
+        }
+        else if (input_name[in_index] == '.')
+        {  // encountered a period
+            while (out_index < 8)
+            {  // fill the output with spaces until the 3-char extension
+                output_name[out_index] = ' ';
+                out_index++;
+            }
+            
+            in_index++;
+        }
+        else
+        {
+            in_char = input_name[in_index];
+            
+            // convert to uppercase
+            if (in_char >= (char)0x61 && in_char <= (char)0x7a)
+				in_char -= 0x20;
+            
+            output_name[out_index] = in_char;
+            
+            in_index++;
+            out_index++;
+        }
+    }
+    
+    while (out_index < 11)
+    {
+        output_name[out_index] = ' ';
+        out_index++;
+    }
+}
+
+
+
+
+
+
 
 
 
@@ -324,7 +461,11 @@ retry:
 // mount the microSD card's FAT32 filesystem
 bool m_sd_init (void)
 {
+    #if defined(M2)
+    m_bus_init();
+    #elif defined(M4)
     mBusInit();
+    #endif
     
     transmission.order.command = M_SD_INIT;
     transmission.order.data_length = 0;
@@ -512,10 +653,8 @@ bool m_sd_get_dir_entry_first (char name[13], uint32_t *size, bool *is_directory
         name[0] = '\0';
         if (retval)
         {
-            uint8_t i;
-            for (i = 6; i < transmission.response.data_length; i++)
-                name[i - 6] = transmission.response.data[i];
-            name[i - 6] = '\0';
+            filename_fs_to_8_3 ((char*)&(transmission.response.data[6]),
+                                name);
         }
     }
     
@@ -564,10 +703,8 @@ bool m_sd_get_dir_entry_next (char name[13], uint32_t *size, bool *is_directory)
         name[0] = '\0';
         if (retval)
         {
-            uint8_t i;
-            for (i = 6; i < transmission.response.data_length; i++)
-                name[i - 6] = transmission.response.data[i];
-            name[i - 6] = '\0';
+            filename_fs_to_8_3 ((char*)&(transmission.response.data[6]),
+                                name);
         }
     }
     

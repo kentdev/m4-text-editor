@@ -1,21 +1,26 @@
 /*******************************************************************************
 * m_microsd.h
-* version: 1.0
+* version: 1.1
 * date: April 16, 2013
 * author: Kent deVillafranca (kent@kentdev.net)
 * description: Contains the functions needed to communicate with the mMicroSD
-*              peripheral over I2C from the M4.
+*              peripheral over I2C from the M2 or M4.
 *******************************************************************************/
 
 #ifndef M_MICROSD_H
 #define M_MICROSD_H
 
-#include "mGeneral.h"
-#include "mBus.h"
-#include "mUSB.h"
-#include <stdbool.h>
-
-#define FILE_END_POS ((uint32_t)0xffffffff)
+#if defined(M2)
+ #include "m_general.h"
+ #include "m_bus.h"
+ #include "m_usb.h"
+#elif defined (M4)
+ #include "mGeneral.h"
+ #include "mBus.h"
+ #include "mUSB.h"
+#else
+ #error "Unknown device, you must define either M2 or M4 in the makefile"
+#endif
 
 typedef enum m_sd_errors
 {
