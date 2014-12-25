@@ -101,7 +101,7 @@ reconnect:
                 }
                 else
                 {
-                    printf ("ERROR: Could not initialize microSD card\r\n");
+                    printf ("ERROR: Could not initialize microSD card: error code %d\r\n", m_sd_error_code);
                 }
             }
             
